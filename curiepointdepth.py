@@ -23,6 +23,8 @@ import cm_utils
 def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     """
     Split the main grid into smaller grids.
+    
+    Expected input format is "surfer 7"
 
     Requires "graphics" from:
     https://github.com/jobar8/graphics
@@ -42,7 +44,7 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     working_dir: main directory where the main data grid lives and where
                  processing subdirectories will be created.
 
-    gridfilename: main data grid to be split.
+    gridfilename: main data grid to be split.  Expected format is Surfer 7.
 
     window_width:  sub grid width in metres (ie 100 km = 100000)
 
@@ -346,6 +348,11 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
 
     Loops through each file in directory and then incorporates the centre
     coords of each window to the results.
+
+    Incorporates the fractal correction "Beta" from Bansal et al 2011,
+    Geophysics vol 76
+
+    Also calculates heatflow in mW/m^2
 
     Parameters
     ----------
