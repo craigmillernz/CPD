@@ -1,0 +1,6 @@
+name: cpd
+dependencies:
+  - python=3.8
+  - pygmt
+  - matplotlib=3.4.2
+  
