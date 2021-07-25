@@ -9,6 +9,7 @@ dependencies:
   - pandas
   - scikit-image
   - pyshp
+  - cmcrameri
   - pip
   - pip:
     - statsmodels
