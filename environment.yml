@@ -7,7 +7,7 @@ dependencies:
   - python=3.8
   - pygmt
   - matplotlib=3.4.2
-  - osgeo=3.3.1
+  - osgeo
   - pandas
   - pip
   - pip:
