@@ -15,3 +15,6 @@ Change to using pygmt for calling gmt functions directly within python, not as e
 
 Requires pygmt 
 https://www.pygmt.org/dev/overview.html
+
+Requires GDAL
+https://gdal.org/api/python.html
