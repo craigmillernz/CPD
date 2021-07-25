@@ -1,6 +1,5 @@
 name: cpd
 channels:
-  - conda-forge
   - defaults
   
 dependencies:
