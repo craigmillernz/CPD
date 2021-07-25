@@ -5,7 +5,8 @@ dependencies:
   - matplotlib=3.4.2
   - osgeo=3.3.1
   - pandas
+  - pip
   - pip:
     - statsmodels
-  
-  
+    - git+https://github.com/jobar8/graphics.git 
+    - git+https://github.com/craigmillernz/cm_utils.git
