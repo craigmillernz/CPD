@@ -7,7 +7,7 @@ dependencies:
   - pygmt
   - matplotlib
   - pandas
-  - skimage
+  - scikit-image
   - pip
   - pip:
     - statsmodels
