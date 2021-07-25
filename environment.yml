@@ -8,6 +8,7 @@ dependencies:
   - matplotlib
   - pandas
   - scikit-image
+  - pyshp
   - pip
   - pip:
     - statsmodels
