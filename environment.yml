@@ -7,9 +7,9 @@ dependencies:
   - pygmt
   - matplotlib
   - pandas
+  - skimage
   - pip
   - pip:
-    - interpies
     - statsmodels
     - gdal
     - osgeo
