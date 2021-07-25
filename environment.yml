@@ -9,8 +9,8 @@ dependencies:
   - pandas
   - pip
   - pip:
+    - interpies
     - statsmodels
     - gdal
     - osgeo
-    - interpies
- 
+    
