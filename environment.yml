@@ -13,5 +13,5 @@ dependencies:
     - statsmodels
     - gdal
     - osgeo
-    - git+https://github.com/jobar8/graphics.git 
-    - git+https://github.com/craigmillernz/cm_utils.git
+    - interpies
+ 
