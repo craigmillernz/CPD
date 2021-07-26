@@ -8,26 +8,28 @@ Created on Wed May 04 11:09:00 2016
 
 """
 
-import subprocess as sp
 from osgeo import gdal
 import os
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-import graphics
+from matplotlib.colors import LightSource
+from matplotlib.patches import Rectangle
+from skimage.exposure import equalize_hist
 import pandas as pd
 import statsmodels.api as sm
 import cm_utils
+import pygmt
+from pygmt.helpers import GMTTempFile
+from cmcrameri import cm as sci_cm
+import xarray as xr
 
 
 def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     """
     Split the main grid into smaller grids.
-    
-    Expected input format is "surfer 7"
 
-    Requires "graphics" from:
-    https://github.com/jobar8/graphics
+    Expected input format is "surfer 7"
 
     This function takes in the large initial grid and splits it into windows
     of specified width and overlap.
@@ -46,12 +48,13 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
 
     gridfilename: main data grid to be split.  Expected format is Surfer 7.
 
-    window_width:  sub grid width in metres (ie 100 km = 100000)
+    window_width:  sub grid width in metres (ie 100 km = 100000.)  Note must
+                   include . at end of value.
 
     overlap_factor: overlap of adjacent grids
-    use factor of 2 with 100000 window_width to get 50 km spaced points
-    use factor of 4 with 200000 window_width to get 50 km spaced points
-    use factor of 6 with 300000 window_width to get 50 km spaced points
+    use factor of 2 with 100000. window_width to get 50 km spaced points
+    use factor of 4 with 200000. window_width to get 50 km spaced points
+    use factor of 6 with 300000. window_width to get 50 km spaced points
 
     Returns
     -------
@@ -61,9 +64,6 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     plt.close('all')
     # set no data value
     blank = 1.701410009187828e+038
-    # set gdal locations
-    gdalTranslate = r'C:/Program Files/GDAL/gdal_translate.exe'
-    gdalinfo = r'C:/Program Files/GDAL/gdalinfo.exe'
 
     # define window width
     window_width = window_width  # in grid units (degrees or metres)
@@ -84,26 +84,22 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
 
     if not os.path.exists(out_dir + dsep + 'window_' + str(window_width/1000)):
         os.makedirs(out_dir + dsep + 'window_' + str(window_width/1000))
+
+    if not os.path.exists(out_dir + dsep + 'fft_output' + str(window_width/1000)):
         os.makedirs(main_dir + dsep + 'fft_output'
                     + dsep + 'window_' + str(window_width/1000))
+
+    if not os.path.exists(out_dir + dsep + 'spectra_plots' + str(window_width/1000)):
         os.makedirs(main_dir + dsep + 'spectra_plots'
                     + dsep + 'window_' + str(window_width/1000))
+
+    if not os.path.exists(out_dir + dsep + 'results' + str(window_width/1000)):
         os.makedirs(main_dir + dsep + 'results'
                     + dsep + 'window_' + str(window_width/1000))
+
     outfile = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + 'window'
 
-    # load the input grid file
-    # these 2 lines prevent cmd window opening suinfo = startupinfo
-    suinfo = sp.STARTUPINFO()
-    suinfo.dwFlags |= sp.STARTF_USESHOWWINDOW
-
-    # run gdalinfo on input grid
-    info_cmd = str(gdalinfo) + ' ' + grid
-    sp.Popen(info_cmd, -1, stdout=sp.PIPE, stderr=sp.PIPE,
-             startupinfo=suinfo, creationflags=0x08000000)
-    # print info_process.communicate()[0]
-    time.sleep(1)
-    # sp.Popen.terminate(info_process)
+    gdal.Info(str(grid))
 
     # get grid extents
     datagrid = gdal.Open(grid)
@@ -136,10 +132,7 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     print("ymax : " + str(ymax) + "m")
     print("\n")
 
-    # os.system('taskkill /F /FI "WindowTitle eq C:\PROGRAM FILES\GDAL\gdalinfo.exe" /T')
-
     # setup windowing of the main grid
-
     # define initial window corners in the top left corner of the grid
     window_ulx = grid_topleftX
     window_uly = grid_topleftY
@@ -149,26 +142,22 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     # set subset counter
     subset = 1
 
-    # process subsets loop moving from left to right and top to bottom along grid
+    # process subsets loop moving from left to right and top to bottom 
     while window_uly > grid_lowerrightY:
-
         while window_ulx < grid_lowerrightX:
             print('processing subset #' + str(subset))
-            cmd = (str(gdalTranslate) + ' -of GS7BG -projwin ' + str(window_ulx) +
-                   ' ' + str(window_uly) + ' ' + str(window_lrx) + ' ' +
-                   str(window_lry) + ' ' + grid + ' ' + outfile + '_' +
-                   str(subset) + '.grd')
-            sp.Popen(cmd, -1, stdout=sp.PIPE, stderr=sp.PIPE,
-                     startupinfo=suinfo, creationflags=0x08000000)
-            # print subset_process.communicate()[0]
+            gdal.Translate(outfile + '_' + str(subset) + '.grd', str(grid),
+                           format='GS7BG', projWin=[window_ulx, window_uly,
+                                                    window_lrx, window_lry]
+                           )
+
             # update subset coords - move in +X direction
             window_ulx = window_ulx + window_step
             window_lrx = window_lrx + window_step
             time.sleep(1)
-            # os.system('taskkill /F /FI "WindowTitle eq gdal_translate.exe" /T')
             subset += 1
 
-        # reset x coords to left hand side of grid 
+        # reset x coords to left hand side of grid
         window_ulx = grid_topleftX
         window_lrx = window_ulx + window_width
         # increment y coords down a step
@@ -176,7 +165,6 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
         window_lry = window_lry - window_step
 
     # loop through created subgrids and make a file of the grid centers
-
     os.chdir(out_dir + dsep + 'window_' + str(window_width/1000))
     centerx = []
     centery = []
@@ -185,10 +173,6 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     for fn in os.listdir(out_dir + dsep + 'window_' + str(window_width/1000)):
         if fn.endswith(".grd"):
             print("file:", fn)
-            info_cmd = str(gdalinfo) + ' ' + fn
-            sp.Popen(info_cmd, -1, stdout=sp.PIPE, stderr=sp.PIPE,
-                     startupinfo=suinfo, creationflags=0x08000000)
-            # print info_process.communicate()[0]
             datagrid = gdal.Open(fn)
             gridinfo = datagrid.GetGeoTransform()
             centerx.append(gridinfo[0] + window_width/2)
@@ -218,20 +202,28 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
             mag[mag == blank] = np.nan
             # test if array contains all nans (or no data)
             test = mag[np.logical_not(np.isnan(mag))]
-            if len(test) == 0:
-                print("empty")
+            # if len(test) == 0:
+            #    print("empty")
+            if len(test) != len(mag.flatten()):
+                print("skipping, grid contains nans")
+
             else:
-                # plot using graphics.imshow library
+                # plot
                 fig, ax = plt.subplots(figsize=(5, 5))
-                graphics.imshow_hs(mag, ax, cmap_norm='equalize', hs=True,
-                                   colorbar=True, cb_ticks='stats', nSigma=2,
-                                   azdeg=45, altdeg=45, blend_mode='alpha',
-                                   alpha=0.7, extent=(xmin, xmax, ymin, ymax),
-                                   origin='upper', contours=False, labels=False,
-                                   fmt='%.0f',
-                                   levels=np.arange(round(np.nanmin(mag), 0),
-                                                    round(np.nanmax(mag), 0),
-                                                    2))
+                mag_equalised = equalize_hist(mag)
+                ls = LightSource(azdeg=45, altdeg=45)
+                norm_eq = cm_utils.MidpointNormalize(vmin=mag_equalised.min(),
+                                                     vmax=mag_equalised.max(),
+                                                     midpoint=0)
+
+                cmap = sci_cm.vik
+                relief = ls.shade(mag_equalised, cmap=cmap,
+                                  blend_mode='overlay',
+                                  vert_exag=50, vmin=0, vmax=1)
+
+                ax.imshow(relief, extent=(xmin, xmax, ymin, ymax),
+                          norm=norm_eq, alpha=0.8)
+
                 plt.xlabel('Easting')
                 plt.ylabel('Northing')
                 plt.savefig(os.path.splitext(fn)[0] + '.png', dpi=100)
@@ -244,10 +236,7 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     np.savetxt('window_' + str(window_width/1000) + '_km_center_coords.csv',
                center_coords, fmt='%s', delimiter=',')
 
-    os.system('taskkill /F /FI "WindowTitle eq C:\PROGRAM FILES\GDAL\gdalinfo.exe" /T')
-
     # Plot center points and subset outlines overlain on maggrid
-
     # read in grid
     datagrid = gdal.Open(grid)
     gridinfo = datagrid.GetGeoTransform()
@@ -269,23 +258,35 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     mag = np.array(datagrid.GetRasterBand(1).ReadAsArray())
     mag[mag == blank] = np.nan
 
-    # plot using graphics.imshow library
+    # plot
     fig, ax = plt.subplots(figsize=(10, 10))
     ax = plt.subplot(aspect='equal')
 
-    graphics.imshow_hs(mag, ax, cmap_norm='equalize', hs=True, colorbar=True,
-                       cb_ticks='stats', nSigma=2, azdeg=45, altdeg=45,
-                       blend_mode='alpha', alpha=0.7,
-                       extent=(xmin, xmax, ymin, ymax),
-                       origin='upper', contours=False, labels=False,
-                       fmt='%.0f',
-                       levels=np.arange(round(np.nanmin(mag), 0),
-                                        round(np.nanmax(mag), 0), 2))
+    mag_equalised = equalize_hist(mag)
+    ls = LightSource(azdeg=45, altdeg=45)
+    norm_eq = cm_utils.MidpointNormalize(vmin=mag_equalised.min(),
+                                         vmax=mag_equalised.max(),
+                                         midpoint=0)
 
-    ax.scatter(centerx, centery)
+    cmap = sci_cm.vik
+    relief = ls.shade(mag_equalised, cmap=cmap, blend_mode='overlay',
+                      vert_exag=50, vmin=0, vmax=1)
 
-    cm_utils.rectangles(centerx, centery, window_width, window_width,
-                        facecolor='None')
+    ax.imshow(relief, extent=(xmin, xmax, ymin, ymax), norm=norm_eq, alpha=0.8)
+
+    plt.xlabel('Easting')
+    plt.ylabel('Northing')
+
+    colors = np.random.rand(len(centerx))
+    cmap = plt.cm.tab20
+    c = cmap(colors)
+
+    for x, y, cl in zip(centerx, centery, c):
+        ax.add_patch(Rectangle(xy=(x-window_width/2, y-window_width/2),
+                               width=window_width-1000,
+                               height=window_width-1000,
+                               linewidth=2, color=cl, fill=False))
+        ax.scatter(x, y, color=cl)
 
     plt.savefig(out_dir + dsep + 'window_' + str(window_width/1000) + dsep +
                 'windows_centers.png', dpi=300)
@@ -298,41 +299,43 @@ def runfft(working_dir, window_dir):
     This function runs the fft on each of the grids created from splitgrid.
     It does not produce a file if the grid contains ANY nans.
 
-    Requires GMT installation for grdfft
-    On some machines grdfft is install here.
-    grdfft = 'C:/programs/gmt5/bin/grdfft.exe'
-    adjust as needed if you get a "cannot find the file specified" error
+    Uses pygmt to call grdfft
 
     Parameters
     ----------
-    working_dir: main directory where the main grid file is located
+    working_dir: head directory where the main grid file is located
     window_dir: name of the window_dir created when the grids were split
 
     Returns
     -------
     file: *.txt file with FFT output
     """
-    grdfft = 'C:/Program Files/GMT/gmt5/bin/grdfft.exe'
-
     main_dir = working_dir
-    griddir = main_dir + '/subsetted_grids/' + window_dir
-    outdir = main_dir + '/fft_output/' + window_dir
-
+    dsep = '/'
+    griddir = (main_dir + dsep + 'subsetted_grids' + dsep + window_dir)
+    outdir = main_dir + dsep + 'fft_output' + dsep + window_dir
     os.chdir(griddir)
+    print(griddir)
 
     # run fft loop through all the grd files in the dir
-
-    suinfo = sp.STARTUPINFO()
-    suinfo.dwFlags |= sp.STARTF_USESHOWWINDOW
-
     for fn in os.listdir(griddir):
         if fn.endswith(".grd"):
             print("Doing fft on file:", fn)
-            gmt_cmd = (grdfft + ' ' + fn + ' -G' + outdir + '/' +
-                       os.path.splitext(fn)[0] + str('.txt ') + '-Nq -Er -V')
-            sp.Popen(gmt_cmd, -1, stdout=sp.PIPE, stderr=sp.PIPE,
-                     startupinfo=suinfo, creationflags=0x08000000)
-            time.sleep(0.5)
+            datagrid = gdal.Open(griddir + dsep + fn)
+            band = datagrid.GetRasterBand(1)
+            array = band.ReadAsArray()
+            xgrid = xr.DataArray(array)
+
+            with pygmt.clib.Session() as session:
+                with session.virtualfile_from_grid(xgrid) as fin:
+                    with GMTTempFile() as fout:
+                        args = "{} -Na -Er -V ->{}".format(fin, fout.name)
+                        # args = "{} -L0 -Cn ->{}".format(fin, fout.name)
+                        session.call_module('grdfft', args)
+                        # session.call_module('grdinfo', args)
+                        print(fout.read().strip())
+                        # outdir + '/' + os.path.splitext(fn)[0] + str('.txt ')
+                        time.sleep(0.5)
 
 
 def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
