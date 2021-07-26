@@ -20,7 +20,6 @@ import pandas as pd
 import statsmodels.api as sm
 import cm_utils
 import pygmt
-from pygmt.helpers import GMTTempFile
 from cmcrameri import cm as sci_cm
 import xarray as xr
 
@@ -48,13 +47,12 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
 
     gridfilename: main data grid to be split.  Expected format is Surfer 7.
 
-    window_width:  sub grid width in metres (ie 100 km = 100000.)  Note must
-                   include . at end of value.
+    window_width:  sub grid width in metres (ie 100 km = 100000.)
 
     overlap_factor: overlap of adjacent grids
-    use factor of 2 with 100000. window_width to get 50 km spaced points
-    use factor of 4 with 200000. window_width to get 50 km spaced points
-    use factor of 6 with 300000. window_width to get 50 km spaced points
+    use factor of 2. with 100000. window_width to get 50 km spaced points
+    use factor of 4. with 200000. window_width to get 50 km spaced points
+    use factor of 6. with 300000. window_width to get 50 km spaced points
 
     Returns
     -------
@@ -85,11 +83,13 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     if not os.path.exists(out_dir + dsep + 'window_' + str(window_width/1000)):
         os.makedirs(out_dir + dsep + 'window_' + str(window_width/1000))
 
-    if not os.path.exists(out_dir + dsep + 'fft_output' + str(window_width/1000)):
+    if not os.path.exists(out_dir + dsep + 'fft_output' +
+                          str(window_width/1000)):
         os.makedirs(main_dir + dsep + 'fft_output'
                     + dsep + 'window_' + str(window_width/1000))
 
-    if not os.path.exists(out_dir + dsep + 'spectra_plots' + str(window_width/1000)):
+    if not os.path.exists(out_dir + dsep + 'spectra_plots' +
+                          str(window_width/1000)):
         os.makedirs(main_dir + dsep + 'spectra_plots'
                     + dsep + 'window_' + str(window_width/1000))
 
@@ -142,7 +142,7 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
     # set subset counter
     subset = 1
 
-    # process subsets loop moving from left to right and top to bottom 
+    # process subsets loop moving from left to right and top to bottom
     while window_uly > grid_lowerrightY:
         while window_ulx < grid_lowerrightX:
             print('processing subset #' + str(subset))
@@ -328,7 +328,7 @@ def runfft(working_dir, window_dir):
 
             with pygmt.clib.Session() as session:
                 with session.virtualfile_from_grid(xgrid) as fin:
-                    with GMTTempFile() as fout:
+                    with pygmt.helpers.GMTTempFile() as fout:
                         args = "{} -Na -Er -V ->{}".format(fin, fout.name)
                         # args = "{} -L0 -Cn ->{}".format(fin, fout.name)
                         session.call_module('grdfft', args)
@@ -430,9 +430,14 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
             assert (Zo_start < Zo_end), 'Zo_start value must be smaller than Zo_end value'
 
             # calculate centroid
-            data['y_centroid'] = np.log(data.Wavenumber**(Beta) * (data.Power / data.Wavenumber**2)) / (2*np.pi)  # this is the y axis value
-            data['y_centroid_std'] = np.log(data.Wavenumber**(Beta) * (data.Stdev / data.Wavenumber**2)) / (2*np.pi)
+            data['y_centroid'] = np.log(data.Wavenumber**(Beta) *
+                                        (data.Power / data.Wavenumber**2)) / (2*np.pi)  # this is the y axis value
+
+            data['y_centroid_std'] = np.log(data.Wavenumber**(Beta) *
+                                            (data.Stdev / data.Wavenumber**2)) / (2*np.pi)
+
             # data['y_centroid'] = np.log(data.Power**0.5 / np.abs(data.Wavenumber)) / (2*np.pi)  # this is the y axis value
+
             # data['y_centroid_std'] = np.log(data.Stdev**0.5 / np.abs(data.Wavenumber)) / (2*np.pi)
             data['wavenumber_2pi'] = np.abs(data.Wavenumber * 1000) / (2*np.pi)  # this is the x axis value (wavenumber/2pi) in cycles per km
 
