@@ -21,7 +21,6 @@ import statsmodels.api as sm
 import cm_utils
 import pygmt
 from cmcrameri import cm as sci_cm
-import xarray as xr
 
 
 def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
@@ -97,7 +96,8 @@ def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
         os.makedirs(main_dir + dsep + 'results'
                     + dsep + 'window_' + str(window_width/1000))
 
-    outfile = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + 'window'
+    outfile = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + \
+        'window'
 
     gdal.Info(str(grid))
 
@@ -317,25 +317,25 @@ def runfft(working_dir, window_dir):
     os.chdir(griddir)
     print(griddir)
 
+    blank = 1.701410009187828e+038
+
     # run fft loop through all the grd files in the dir
     for fn in os.listdir(griddir):
         if fn.endswith(".grd"):
             print("Doing fft on file:", fn)
-            datagrid = gdal.Open(griddir + dsep + fn)
-            band = datagrid.GetRasterBand(1)
-            array = band.ReadAsArray()
-            xgrid = xr.DataArray(array)
+            datagrid = gdal.Open(fn)
+            mag = np.array(datagrid.GetRasterBand(1).ReadAsArray())
+            mag[mag == blank] = np.nan
 
-            with pygmt.clib.Session() as session:
-                with session.virtualfile_from_grid(xgrid) as fin:
-                    with pygmt.helpers.GMTTempFile() as fout:
-                        args = "{} -Na -Er -V ->{}".format(fin, fout.name)
-                        # args = "{} -L0 -Cn ->{}".format(fin, fout.name)
-                        session.call_module('grdfft', args)
-                        # session.call_module('grdinfo', args)
-                        print(fout.read().strip())
-                        # outdir + '/' + os.path.splitext(fn)[0] + str('.txt ')
-                        time.sleep(0.5)
+            # test if array contains all nans (or no data)
+            test = mag[np.logical_not(np.isnan(mag))]
+            if len(test) != len(mag.flatten()):
+                print("skipping, grid contains nans")
+            else:
+                with pygmt.clib.Session() as session:
+                    fout = outdir + '/' + os.path.splitext(fn)[0] + str('.txt')
+                    args = f"{fn} -Na -Er -G{fout}"
+                    session.call_module('grdfft', args)
 
 
 def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
