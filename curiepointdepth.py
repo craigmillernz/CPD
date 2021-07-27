@@ -334,12 +334,31 @@ def runfft(working_dir, window_dir):
             else:
                 with pygmt.clib.Session() as session:
                     fout = outdir + '/' + os.path.splitext(fn)[0] + str('.txt')
-                    args = f"{fn} -Na -Er -G{fout}"
+                    args = f"{fn} -Nq -Er -G{fout}"
                     session.call_module('grdfft', args)
+
+                    # Plot raw spectrum
+                    data = pd.read_csv(fout, names=['Wavenumber', 'Power',
+                                                    'Stdev'],
+                                       delim_whitespace=True)
+
+                    fig, ax = plt.subplots(figsize=(4, 4))
+
+                    ax.scatter(data.Wavenumber*1000, data.Power, marker='o',
+                               s=2, label="Data")
+                    ax.set_xlim(0, data.Wavenumber.max()*1000)
+                    ax.set_xlabel(r'$|k| [km^{-1}$]')
+                    ax.set_ylabel('Power')
+                    plt.title(fn.split('.')[0])
+                    ax.semilogy()
+                    ax.set_ylim(data.Power.min(), data.Power.max())
+                    plt.tight_layout()
+                    plt.savefig(outdir + '/' + os.path.splitext(fn)[0] +
+                                str('_spectrum.png'))
 
 
 def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
-            K, CT):
+            K=2.5, CT=570):
     """
     Calculate the Curie Point Depth.
 
@@ -418,31 +437,30 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
             print("\nMaking plot of file:", fn)
             plotfile = plotdir + dsep + fn.split('.')[0] + '.png'
             window_table.append(fn.split('.')[0])
-            data = pd.read_csv(datadir + dsep + fn, sep='\t',
+            data = pd.read_csv(datadir + dsep + fn, delim_whitespace=True,
                                names=['Wavenumber', 'Power', 'Stdev'],
                                comment='#')
-
+            print(data.columns)
             # Calculate centroid depth, Zo
-            # centroid fit points (k/2pi), may need to adjust values slightly if errors
+            # centroid fit points (k*1000/2pi), may need to adjust values
+            # slightly if index errors, they need to match actual values
             Zo_start = Zo_start
             Zo_end = Zo_end
 
             assert (Zo_start < Zo_end), 'Zo_start value must be smaller than Zo_end value'
 
             # calculate centroid
+            # this is the y axis value
             data['y_centroid'] = np.log(data.Wavenumber**(Beta) *
-                                        (data.Power / data.Wavenumber**2)) / (2*np.pi)  # this is the y axis value
+                                        (data.Power / data.Wavenumber**2)) / (2*np.pi)
 
             data['y_centroid_std'] = np.log(data.Wavenumber**(Beta) *
                                             (data.Stdev / data.Wavenumber**2)) / (2*np.pi)
 
-            # data['y_centroid'] = np.log(data.Power**0.5 / np.abs(data.Wavenumber)) / (2*np.pi)  # this is the y axis value
-
-            # data['y_centroid_std'] = np.log(data.Stdev**0.5 / np.abs(data.Wavenumber)) / (2*np.pi)
-            data['wavenumber_2pi'] = np.abs(data.Wavenumber * 1000) / (2*np.pi)  # this is the x axis value (wavenumber/2pi) in cycles per km
+            # this is the x axis value (wavenumber/2pi) in cycles per km
+            data['wavenumber_2pi'] = np.abs(data.Wavenumber * 1000) / (2*np.pi)
 
             # select the data to fit
-
             centroid_fit_start = data[data.wavenumber_2pi.round(3) == Zo_start].index[0]
             centroid_fit_end = data[data.wavenumber_2pi.round(3) == Zo_end].index[0]
             centroid_fit_pts = slice(centroid_fit_start, centroid_fit_end)
@@ -473,8 +491,6 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
             # calculate top depth
             data['y_top'] = np.log(data.Wavenumber**(Beta) * data.Power) / (2*np.pi)
             data['y_top_std'] = np.log(data.Wavenumber**(Beta) * data.Stdev) / (2*np.pi)
-            # data['y_top'] = np.log(data.Power**0.5) / (2*np.pi)
-            # data['y_top_std'] = np.log(data.Stdev**0.5) / (2*np.pi)
 
             # select  the data to fit
             top_fit_start = data[data.wavenumber_2pi.round(3) == Zt_start].index[0]
@@ -502,7 +518,6 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
                                                                centroid_depth_err))
 
             # CALCULATE BASE DEPTH
-
             base_depth = 2 * centroid_depth - top_depth
             base_depth_table.append(base_depth)
             base_depth_err = np.sqrt(np.sum(top_depth_err**2 + centroid_depth_err**2))
@@ -530,13 +545,11 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
             plt.title(fn.split('.')[0])
             plt.semilogy()
             plt.ylim(data.Power.min(), data.Power.max())
-            plt.tight_layout()
 
             # plot centroid
             plt.subplot(132)
             plt.scatter(data.wavenumber_2pi, data.y_centroid, marker='o', s=2,
                         label="Data")
-            # plt.errorbar(data.wavenumber_2pi, data.y_centroid, yerr=data.y_centroid_std, marker='o', markersize=2, errorevery=10, label="Data")
 
             plt.plot(centroid_fit_wavenumber, cent_results.fittedvalues, 'r-',
                      label="Linear fit")
@@ -548,13 +561,11 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
             plt.annotate(r'centroid depth %0.1f $\pm$ %0.1f km'
                          % (centroid_depth, centroid_depth_err),
                          xy=(0.01, 1.5), xytext=(0.01, 1.5))
-            plt.tight_layout()
 
             # plot top
             plt.subplot(133)
             plt.scatter(data.wavenumber_2pi, data.y_top, marker='o', s=2,
                         label="Data")
-            # plt.errorbar(data.wavenumber_2pi, data.y_top, yerr=data.y_top_std, marker='o', markersize=2, errorevery=10, label="Data")
             plt.plot(top_fit_wavenumber, top_results.fittedvalues, 'r-',
                      label="Linear fit")
             plt.xlim(0, data.wavenumber_2pi.max())
@@ -569,8 +580,6 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
                          % (base_depth, base_depth_err),
                          xy=(0.01, 0.3), xytext=(0.01, 0.3))
             plt.savefig(plotfile, dpi=300, bbox_inches='tight')
-            plt.tight_layout()
-            plt.close()
 
     # create dataframe of results tables
     results = pd.DataFrame(centroid_depth_table, index=window_table,
@@ -582,6 +591,8 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
     results['top_rsq_table'] = top_rsq_table
     results['base_depth_table'] = base_depth_table
     results['base_depth_err_table'] = base_depth_err_table
+    results['gradient_table'] = gradient_table
+    results['heatflow_table'] = heatflow_table
 
     # combine cell center file with results table
     result = pd.concat([gridcenters, results], axis=1).dropna()
@@ -600,8 +611,8 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
                   float_format='%.2f', index=False)
 
     # Plot curie depth vs heatflow
+    plt.figure()
     plt.scatter(results.heatflow_table, results.base_depth_table)
     plt.xlabel('heatflow (mW/m$^2$)')
     plt.ylabel('Curie Pt depth (km)')
-    plt.savefig(resultdir + 'heatflow_CPD.png', dpi=600)
-    plt.show()
+    plt.savefig(resultdir + dsep + 'heatflow_CPD.png', dpi=300)
