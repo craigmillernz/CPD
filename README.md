@@ -11,5 +11,10 @@ Tectonophysics, 306 (1999), pp. 461–470
 A. R. Bansal, G. Gabriel, V. P. Dimri, and C. M. Krawczyk, (2011), "Estimation of depth to the bottom of magnetic sources by a modified centroid method for fractal distribution of sources: An application to aeromagnetic data in Germany," GEOPHYSICS 76: L11-L22.
 https://doi.org/10.1190/1.3560017
 
-Requires GMT installed for calling grdfft
-http://gmt.soest.hawaii.edu/
+Change to using pygmt for calling gmt functions directly within python, not as external system calls.
+
+Requires pygmt 
+https://www.pygmt.org/dev/overview.html
+
+Requires GDAL
+https://gdal.org/api/python.html
