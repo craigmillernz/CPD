@@ -23,6 +23,12 @@ import cm_utils
 from cmcrameri import cm as sci_cm
 import geosoft.gxpy as gx
 
+# SET GLOABL FONT PARAMETERS
+font = {'family': 'Arial',
+        'weight': 'normal',
+        'size': 8}
+plt.rc('font', **font)
+
 
 def splitgrid_geosoft(working_dir, gridfilename, window_width, overlap_factor):
     """
@@ -109,9 +115,13 @@ def splitgrid_geosoft(working_dir, gridfilename, window_width, overlap_factor):
 
     # set subset counter
     subset = 1
+    window = 1
 
     # process subsets loop moving from left to right and top to bottom
     # while window_uly > grid_lowerrightY:
+
+    center = []
+    window_num = []
 
     for ix in range(0, datagrid.nx, int(window_step)):
         for iy in range(0, datagrid.ny, int(window_step)):
@@ -121,147 +131,91 @@ def splitgrid_geosoft(working_dir, gridfilename, window_width, overlap_factor):
             else:
                 print(f'processing subset # {subset} : X0={ix}, Y0={iy}')
 
-                gx.grid.Grid.index_window(datagrid,
-                                          name=outfile + '_' + str(subset) + '.grd',
-                                          x0=ix,
-                                          y0=iy,
-                                          nx=window_pixels_x,
-                                          ny=window_pixels_y,
-                                          overwrite=True)
-                time.sleep(1)
+                window_grid = gx.grid.Grid.index_window(datagrid,
+                                                        name=outfile + '_' + str(subset) + '.grd',
+                                                        x0=ix,
+                                                        y0=iy,
+                                                        nx=window_pixels_x,
+                                                        ny=window_pixels_y,
+                                                        overwrite=True)
+                # time.sleep(1)
+                center.append(window_grid.centroid_xy)
+                window_num.append(window)
                 subset += 1
-
-    # add another sleep to allow for grid writing
-    time.sleep(2)
-    # loop through created subgrids and make a file of the grid centers
-    os.chdir(out_dir + dsep + 'window_' + str(window_width/1000))
-    # centerx = []
-    # centery = []
-    center = []
-    window_num = []
-
-    for fn in os.listdir(out_dir + dsep + 'window_' + str(window_width/1000)):
-        if fn.endswith(".grd"):
-            print("file:", fn)
-            datagrid = gx.grid.Grid.open(fn)
-            center.append(datagrid.centroid_xy)
-            window_num.append(os.path.splitext(fn)[0])
-            time.sleep(1)
-
-            # plot
-            # get the grid extent and coordinate system from which we will
-            # create a default map named after the grid
-            # do this in a separate `with...` as the Aggregate_group class
-            # needs access to the grid file.
-
-            extent = datagrid.extent_2d()
-            coordinate_system = datagrid.coordinate_system
-
-            grid_file_name = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + fn
-            map_file_name = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + fn.split()[0] +'.map'
-            png_file_name = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + fn.split()[0] +'.png'
-
-            # create a map for this grid on A4 media, scale to fit the extent
-            with gx.map.Map.new(map_file_name,
-                                data_area=extent,
-                                media="A4",
-                                margins=(1, 3.5, 3, 1),
-                                coordinate_system=coordinate_system,
-                                overwrite=True) as gmap:
-
-                # work with the data view
-                with gx.view.View.open(gmap, "data") as v:
-
-                    # add the grid image to the view
-                    with gx.agg.Aggregate_image.new(grid_file_name, shade=True,
-                                                    contour=20) as agg:
-                        gx.group.Aggregate_group.new(v, agg)
-                        # colour legend
-                        gx.group.legend_color_bar(v, 'TMI_legend',
-                                                  title='Res TMI\nnT',
-                                                  location=(1.2, 0),
-                                                  cmap=agg.layer_color_map(0),
-                                                  cmap2=agg.layer_color_map(1))
-
-                    # contour the grid
-                    gx.group.contour(v, 'TMI_contour', grid_file_name)
-
-                # add a map surround to the map
-                gmap.surround(outer_pen='kt500', inner_pen='kt100', gap=0.1)
-
-                # annotate the data view locations
-                gmap.annotate_data_xy(grid=gx.map.GRID_CROSSES)
-                gmap.annotate_data_ll(grid=gx.map.GRID_LINES,
-                                      grid_pen=gx.group.Pen(line_color='b'),
-                                      text_def=gx.group.Text_def(color='b',
-                                                                 height=0.15,
-                                                                 italics=True))
-                # scale bar
-                gmap.scale_bar(location=(1, 3, 1.5),
-                               text_def=gx.group.Text_def(height=0.15))
-
-            # Save the map to file
-            gx.map.Map.open(map_file_name).image_file(imagefile=png_file_name,
-                                                      pix_width=800)
-
-            time.sleep(1)
+                window += 1
 
     window_num = np.array(window_num)
     center_coords = np.c_[window_num, center]
     np.savetxt('window_' + str(window_width/1000) + '_km_center_coords.csv',
-               center_coords, fmt='%s', delimiter=',')
+               center_coords, fmt='%.0f %.1f %.1f', delimiter=',')
+    time.sleep(2)
 
-    # Plot center points and subset outlines overlain on the input grid
-    datagrid = gx.grid.Grid.open(main_dir + dsep + gridfilename)
-    extent = datagrid.extent_2d()
-    coordinate_system = datagrid.coordinate_system
+    # plot centroid locations
+    # convert grid to gxf
+    # https://gist.github.com/jesserobertson/59050674e2871ea03acd3fa312ac9c02
+    # convert to gxf format then rasterio/GDAL to load and matplotlib to plot
 
-    grid_file_name = main_dir + dsep + gridfilename
-    map_file_name = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + gridfilename.split()[0] +'.map'
-    png_file_name = out_dir + dsep + 'window_' + str(window_width/1000) + dsep + gridfilename.split()[0] +'.png'
+    gxf_file = main_dir + dsep + datagrid.name + '.gxf'
+    gx.grid.Grid.copy(datagrid, gxf_file + '(GXF)', overwrite=True)
 
-    # create a map for this grid on A4 media, scale to fit the extent
-    with gx.map.Map.new(map_file_name,
-                        data_area=extent,
-                        media="A4",
-                        margins=(1, 3.5, 3, 1),
-                        coordinate_system=coordinate_system,
-                        overwrite=True) as gmap:
-        # work with the data view
-        with gx.view.View.open(gmap, "data") as v:
+    gxf_grid = gdal.Open(gxf_file)
+    gridinfo = gxf_grid.GetGeoTransform()
+    grid_topleftX = gridinfo[0]  # xmin
+    grid_topleftY = gridinfo[3]  # ymax
+    pixelwidth = gridinfo[1]
+    pixelheight = gridinfo[5]
+    cols = gxf_grid.RasterXSize
+    rows = gxf_grid.RasterYSize
+    grid_lowerrightX = grid_topleftX + (cols * pixelwidth)  # xmax
+    grid_lowerrightY = grid_topleftY + (rows * pixelheight)  # ymin
 
-            # add the grid image to the view
-            with gx.agg.Aggregate_image.new(grid_file_name, shade=True,
-                                            contour=20) as agg:
-                gx.group.Aggregate_group.new(v, agg)
-                # colour legend
-                gx.group.legend_color_bar(v, 'TMI_legend',
-                                          title='Res TMI\nnT',
-                                          location=(1.2, 0),
-                                          cmap=agg.layer_color_map(0),
-                                          cmap2=agg.layer_color_map(1))
+    xmin = grid_topleftX
+    xmax = grid_lowerrightX
+    ymin = grid_lowerrightY
+    ymax = grid_topleftY
 
-            # contour the grid
-            gx.group.contour(v, 'TMI_contour', grid_file_name)
+    # create a numpy array from grid
+    blank = -1.e+12
+    mag = np.array(gxf_grid.GetRasterBand(1).ReadAsArray())
+    mag[mag == blank] = np.nan
 
-        # add a map surround to the map
-        gmap.surround(outer_pen='kt500', inner_pen='kt100', gap=0.1)
+    # plot
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax = plt.subplot(aspect='equal')
 
-        # annotate the data view locations
-        gmap.annotate_data_xy(grid=gx.map.GRID_CROSSES)
-        gmap.annotate_data_ll(grid=gx.map.GRID_LINES,
-                              grid_pen=gx.group.Pen(line_color='b'),
-                              text_def=gx.group.Text_def(color='b',
-                                                         height=0.15,
-                                                         italics=True))
-        # scale bar
-        gmap.scale_bar(location=(1, 3, 1.5),
-                       text_def=gx.group.Text_def(height=0.15))
+    # mag_equalised = equalize_hist(mag)
+    mag_equalised = mag
+    ls = LightSource(azdeg=45, altdeg=45)
+    norm_eq = cm_utils.MidpointNormalize(vmin=np.percentile(mag_equalised, 5),
+                                         vmax=np.percentile(mag_equalised, 95),
+                                         midpoint=0)
 
-    # Save the map to file
-    gx.map.Map.open(map_file_name).image_file(imagefile=png_file_name,
-                                              pix_width=800)
+    cmap = sci_cm.vik
+    relief = ls.shade(mag, cmap=cmap, blend_mode='overlay',
+                      vert_exag=20, vmin=0, vmax=1)
 
+    ax.imshow(relief, extent=(xmin, xmax, ymin, ymax), norm=norm_eq, alpha=0.8)
+
+    plt.xlabel('Easting')
+    plt.ylabel('Northing')
+
+    colors = np.random.rand(len(center))
+    cmap = plt.cm.tab20
+    c = cmap(colors)
+
+    for win, x, y, cl in zip(np.array(center_coords)[:, 0],
+                             np.array(center_coords)[:, 1],
+                             np.array(center_coords)[:, 2],
+                             np.array(c)):
+        ax.add_patch(Rectangle(xy=(x-window_width/2, y-window_width/2),
+                               width=window_width-1000,
+                               height=window_width-1000,
+                               linewidth=2, color=cl, fill=False, alpha=0.5))
+        ax.scatter(x, y, color=cl)
+        ax.annotate(str(int(win)), (x, y))
+
+    plt.savefig(out_dir + dsep + 'window_' + str(window_width/1000) + dsep +
+                'windows_centers.png', dpi=300)
 
 
 def splitgrid(working_dir, gridfilename, window_width, overlap_factor):
@@ -624,37 +578,43 @@ def runfft_geosoft(working_dir, window_dir):
 
     for fn in os.listdir(griddir):
         if fn.endswith(".grd"):
-            print("Doing fft on file:", fn)
+            print("\n Doing fft on file:", fn)
 
-    # fn = 'D:/Dropbox/TVZ_Curie_point/tests/bhn_tmi_250m_surfer.grd'
-        # open surfer grid
-            grd = gx.grid.Grid.open(fn + '(GRD)')
-            fft = gx.grid_fft.GridFFT(grd)
+            # open geosoft grid
+            grd = gx.grid.Grid.open(fn)
 
-            # this returns a numpy array shaped (n, 5), where each element
-            # contains the wavenumber, number_samples, log(average_power),
-            # depth_3 and depth_5)
+            # test for empty grids and skip if encountered.
+            if grd.statistics().get('min') is not None:
+                fft = gx.grid_fft.GridFFT(grd)
 
-            source_spectrum = fft.radially_averaged_spectrum()
-            # the power is relative to the average density
-            print(f'average spectral density: {fft.log_average_spectral_density()}')
+                # this returns a numpy array shaped (n, 5), where each element
+                # contains the wavenumber, number_samples, log(average_power),
+                # depth_3 and depth_5)
+                # normalise source spectrum by subtracting average power density
+                source_spectrum = fft.radially_averaged_spectrum()
+                source_spectrum[:, 2] = source_spectrum[:, 2] - fft.log_average_spectral_density()
 
-            # save spectrum to file
-            fout = outdir + '/' + os.path.splitext(fn)[0] + str('.txt')
-            np.savetxt(fout, source_spectrum)
+                # the power is relative to the average density
+                print(f'average spectral density: {fft.log_average_spectral_density()}')
 
-            fig, ax = plt.subplots(figsize=(8, 5))
-            ax.plot(source_spectrum[:, gx.grid_fft.I_WAVENUMBER],
-                    source_spectrum[:, gx.grid_fft.I_LOG_POWER],
-                    label='source')
-            ax.set_xlabel('wavenumber [cycles/km]')
-            ax.set_ylabel('Ln Power')
-            plt.title(fn.split('.')[0])
-            plt.legend()
-            plt.grid()
-            plt.savefig(outdir + '/' + os.path.splitext(fn)[0] +
-                        str('_spectrum.png'))
-            plt.close()
+                # save spectrum to file
+                fout = outdir + '/' + os.path.splitext(fn)[0] + str('.txt')
+                np.savetxt(fout, source_spectrum)
+
+                fig, ax = plt.subplots(figsize=(8, 5))
+                ax.plot(source_spectrum[:, gx.grid_fft.I_WAVENUMBER],
+                        source_spectrum[:, gx.grid_fft.I_LOG_POWER],
+                        label='source', marker='o', ms=1, lw=1)
+                ax.set_xlabel('wavenumber [cycles/km]')
+                ax.set_ylabel('Ln Power')
+                plt.title(fn.split('.')[0])
+                plt.legend()
+                plt.grid()
+                plt.savefig(outdir + '/' + os.path.splitext(fn)[0] +
+                            str('_spectrum.png'))
+                plt.close()
+            else:
+                print('skipping fft, grid is blank')
 
 
 def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
@@ -755,9 +715,6 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
             data['y_centroid'] = np.log(data.Wavenumber**(Beta) *
                                         (data.Power / data.Wavenumber**2)) / (2*np.pi)
 
-            #data['y_centroid_std'] = np.log(data.Wavenumber**(Beta) *
-            #                                (data.Stdev / data.Wavenumber**2)) / (2*np.pi)
-
             # this is the x axis value (wavenumber/2pi) in cycles per km
             data['wavenumber_2pi'] = np.abs(data.Wavenumber * 1000) / (2*np.pi)
 
@@ -813,10 +770,10 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
             top_rsq = top_results.rsquared
             top_rsq_table.append(top_rsq)
 
-            print(r'top depth = %0.1f \u00B1 %0.1f km' % (top_depth,
-                                                          top_depth_err))
-            print(r'centroid depth = %0.1f \u00B1 %0.1f km' % (centroid_depth,
-                                                               centroid_depth_err))
+            print(r'top depth = %0.1f $\pm$ %0.1f km' % (top_depth,
+                                                         top_depth_err))
+            print(r'centroid depth = %0.1f $\pm$ %0.1f km' % (centroid_depth,
+                                                              centroid_depth_err))
 
             # CALCULATE BASE DEPTH
             base_depth = 2 * centroid_depth - top_depth
@@ -918,16 +875,14 @@ def calccpd(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
     plt.ylabel('Curie Pt depth (km)')
     plt.savefig(resultdir + dsep + 'heatflow_CPD.png', dpi=300)
 
-def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end, Beta,
-            K=2.5, CT=570):
+
+def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start,
+                    Zt_end, Beta, K=2.5, CT=570):
     """
     Calculate the Curie Point Depth.
 
-    Also calculates an error for each using the stdev value from the fft
-    Uses the Tanaka method to calculate CPD depths (no fractal correction).
-
-    Read in the output from the GMT grdfft.  Use the output in wavenumbers not
-    wavelengths.
+    Read in the output from the geosoft raidal powerspectrum.
+    Use the output in wavenumbers not wavelengths.
 
     Loops through each file in directory and then incorporates the centre
     coords of each window to the results.
@@ -942,13 +897,13 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end,
     working_dir: main directory where the main data grid lives and where
                  processing subdirectories will be created
     window_dir:
-    Zo_start: starting wavenumnber for centroid depth
-    Zo_end: end wavenumnber for centroid depth
-    Zt_start: starting wavenumnber for top depth
-    Zt_end: end wavenumnber for top depth
+    Zo_start (int): starting wavenumber index for centroid depth
+    Zo_end (int): end wavenumber index for centroid depth
+    Zt_start (int): starting wavenumber index for top depth
+    Zt_end (int): end wavenumber index for top depth
 
-    Z* parameters are the wavenumber values used to fit the straight line to.
-    May take some experimenting to find appropriate values.
+    Z* parameters are the wavenumber index values used to fit the straight line.
+    They start from 0 at lowest wavenumber.
 
     Beta: fractal parameter.  Beta <= 2. Beta = 0 is the same as no correction
 
@@ -975,7 +930,8 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end,
     gridcenters = pd.read_csv(griddir + dsep + window_dir +
                               '_km_center_coords.csv', comment='#',
                               names=['window', 'east', 'north'],
-                              index_col='window')
+                              index_col='window', delim_whitespace=True)
+    gridcenters.index = str('window_') + gridcenters.index.astype(str)
 
     # Tables to store results in
     centroid_depth_table = []
@@ -998,39 +954,43 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end,
             print("\nMaking plot of file:", fn)
             plotfile = plotdir + dsep + fn.split('.')[0] + '.png'
             window_table.append(fn.split('.')[0])
-            # data = pd.read_csv(datadir + dsep + fn, delim_whitespace=True,
-            #                    names=['Wavenumber', 'Power', 'Stdev'],
-            #                    comment='#')
 
             data = pd.read_csv(datadir + dsep + fn, delim_whitespace=True,
-                               names=['Wavenumber', 'Num_samples', 'Power',
-                                      'Depth_3', 'Depth_5'],
-                               comment='#')
+                               names=['Wavenumber', 'Num_samples', 'Ln_P',
+                                      'Depth_3', 'Depth_5'], comment='/')
 
-            print(data.columns)
+            # extract the log average power density value and add back. Geosoft
+            # subtracts the log average power density from the spectrum.
+            '''
+            ave_power = pd.read_csv(datadir + dsep + fn,
+                                    nrows=1, header=None, skiprows=[0, 1],
+                                    delim_whitespace=True)
+            print(ave_power)
+            data['Ln_raw'] = data.Ln_P + ave_power.values
+            '''
+            data['Power'] = np.exp(data.Ln_P)
+
             # Calculate centroid depth, Zo
-            # centroid fit points (k*1000/2pi), may need to adjust values
-            # slightly if index errors, they need to match actual values
-            Zo_start = Zo_start
-            Zo_end = Zo_end
+            Zo_start = int(Zo_start)
+            Zo_end = int(Zo_end)
 
             assert (Zo_start < Zo_end), 'Zo_start value must be smaller than Zo_end value'
 
-            # calculate centroid
-            # this is the y axis value
-            data['y_centroid'] = np.log(data.Wavenumber**(Beta) *
-                                        (data.Power / data.Wavenumber**2)) / (2*np.pi)
+            # Calculate centroid. This is the y axis value.
 
-            # data['y_centroid_std'] = np.log(data.Wavenumber**(Beta) *
-              #                              (data.Stdev / data.Wavenumber**2)) / (2*np.pi)
+            # this is the y axis value Eqn7 Bansal
+            # data['y_centroid'] = np.log(data.Wavenumber**(Beta) * (data.Power / data.Wavenumber**2))/(2*np.pi)
+
+            # Eqn 6 # Andres 2017 JGR
+            # Eqn5 Wang and Li 2015
+            # Beta -1 converts 3D to 2D
+            data['y_centroid'] = np.log(data.Wavenumber**(Beta-1)/2 * data.Power / data.Wavenumber) / (2*np.pi)
 
             # this is the x axis value (wavenumber/2pi) in cycles per km
-            data['wavenumber_2pi'] = np.abs(data.Wavenumber * 1000) / (2*np.pi)
+            data['wavenumber_2pi'] = np.abs(data.Wavenumber)/(2*np.pi)
 
             # select the data to fit
-            centroid_fit_start = data[data.wavenumber_2pi.round(3) == Zo_start].index[0]
-            centroid_fit_end = data[data.wavenumber_2pi.round(3) == Zo_end].index[0]
-            centroid_fit_pts = slice(centroid_fit_start, centroid_fit_end)
+            centroid_fit_pts = slice(Zo_start, Zo_end)
 
             centroid_fit_wavenumber = np.abs(data.wavenumber_2pi[centroid_fit_pts])
             centroid_fit_power = data.y_centroid[centroid_fit_pts]
@@ -1047,22 +1007,22 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end,
             centroid_rsq = cent_results.rsquared
             centroid_rsq_table.append(centroid_rsq)
 
-            print(r"centroid depth = %0.1f \u00B1 %0.1f km" % (centroid_depth,
-                                                               centroid_depth_err))
+            print(r"centroid depth = %0.1f +\- %0.1f km" % (centroid_depth,
+                                                            centroid_depth_err))
 
             # Calculate top depth Zt
-            Zt_start = Zt_start
-            Zt_end = Zt_end
+            Zt_start = int(Zt_start)
+            Zt_end = int(Zt_end)
             assert (Zt_start < Zt_end), 'Zt_start value must be smaller than Zt_end value'
 
             # calculate top depth
-            data['y_top'] = np.log(data.Wavenumber**(Beta) * data.Power) / (2*np.pi)
-            # data['y_top_std'] = np.log(data.Wavenumber**(Beta) * data.Stdev) / (2*np.pi)
+            # data['y_top'] = np.log(data.Wavenumber**Beta * data.Power) / (2*np.pi)
+
+            # Eqn5 Andres 2017 JGR and Eqn4 Wang and Li 2015
+            data['y_top'] = np.log(data.Wavenumber**(Beta-1)/2 * data.Power) / (2*np.pi)
 
             # select  the data to fit
-            top_fit_start = data[data.wavenumber_2pi.round(3) == Zt_start].index[0]
-            top_fit_end = data[data.wavenumber_2pi.round(3) == Zt_end].index[0]
-            top_fit_pts = slice(top_fit_start, top_fit_end)
+            top_fit_pts = slice(Zt_start, Zt_end)
 
             top_fit_wavenumber = np.abs(data.wavenumber_2pi[top_fit_pts])
             top_fit_power = data.y_top[top_fit_pts]
@@ -1079,10 +1039,10 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end,
             top_rsq = top_results.rsquared
             top_rsq_table.append(top_rsq)
 
-            print(r'top depth = %0.1f \u00B1 %0.1f km' % (top_depth,
-                                                          top_depth_err))
-            print(r'centroid depth = %0.1f \u00B1 %0.1f km' % (centroid_depth,
-                                                               centroid_depth_err))
+            print(r'top depth = %0.1f +\- %0.1f km' % (top_depth,
+                                                       top_depth_err))
+            print(r'centroid depth = %0.1f +\- %0.1f km' % (centroid_depth,
+                                                            centroid_depth_err))
 
             # CALCULATE BASE DEPTH
             base_depth = 2 * centroid_depth - top_depth
@@ -1104,49 +1064,49 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end,
 
             # Plot raw spectrum
             plt.subplot(131)
-            plt.scatter(data.Wavenumber*1000, data.Power, marker='o', s=2,
-                        label="Data")
-            plt.xlim(0, data.Wavenumber.max()*1000)
+            plt.plot(data.Wavenumber, data.Ln_P, marker='o', ms=2, lw=1,
+                     label='data')
+            plt.xlim(-0.5, data.Wavenumber.max())
             plt.xlabel(r'$|k| [km^{-1}$]')
-            plt.ylabel('Power')
+            plt.ylabel('Ln Power')
             plt.title(fn.split('.')[0])
-            plt.semilogy()
-            plt.ylim(data.Power.min(), data.Power.max())
+            plt.ylim(data.Ln_P.min(), data.Ln_P.max())
 
             # plot centroid
             plt.subplot(132)
-            plt.scatter(data.wavenumber_2pi, data.y_centroid, marker='o', s=2,
-                        label="Data")
-
+            plt.plot(data.wavenumber_2pi, data.y_centroid, marker='o', ms=2,
+                     lw=1, label="Data")
             plt.plot(centroid_fit_wavenumber, cent_results.fittedvalues, 'r-',
-                     label="Linear fit")
-            plt.xlim(0, data.wavenumber_2pi.max())
+                     lw=1, label="Linear fit")
+            plt.xlim(-0.05, data.wavenumber_2pi.max())
             plt.xlabel(r'$|k|/(2 \pi)$ [km$^{-1}$]')
-            plt.ylabel(r'$\ln(\Phi_{\Delta T}(|k|)^{1/2}/|k|)/(2\pi)$')
+            plt.ylabel(r'$\ln(\Phi_{\Delta T}(|k|)^{(\beta -1)/2}/|k|)/(2\pi)$')
             plt.legend(loc="best")
             plt.title('Centroid')
             plt.annotate(r'centroid depth %0.1f $\pm$ %0.1f km'
                          % (centroid_depth, centroid_depth_err),
-                         xy=(0.01, 1.5), xytext=(0.01, 1.5))
+                         xy=(0.01, 0), xytext=(0.01, 0))
 
             # plot top
             plt.subplot(133)
-            plt.scatter(data.wavenumber_2pi, data.y_top, marker='o', s=2,
-                        label="Data")
-            plt.plot(top_fit_wavenumber, top_results.fittedvalues, 'r-',
+            plt.plot(data.wavenumber_2pi, data.y_top, marker='o', ms=2, lw=1,
+                     label="Data")
+            plt.plot(top_fit_wavenumber, top_results.fittedvalues, 'r-', lw=1,
                      label="Linear fit")
-            plt.xlim(0, data.wavenumber_2pi.max())
+            plt.xlim(-0.05, data.wavenumber_2pi.max())
             plt.xlabel(r'$|k|/(2 \pi)$ [km$^{-1}$]')
-            plt.ylabel(r'$\ln(\Phi_{\Delta T}(|k|)^{1/2})/(2\pi)$')
+            plt.ylabel(r'$\ln(\Phi_{\Delta T}(|k|)^{(\beta -1)/2})/(2\pi)$')
             plt.legend(loc="best")
             plt.title('Top')
             plt.annotate(r'top depth %0.1f $\pm$ %0.1f km'
                          % (top_depth, top_depth_err),
-                         xy=(0.01, 0.2), xytext=(0.01, 0.2))
+                         xy=(0.1, 0.1), xytext=(0.1, 0.1))
             plt.annotate(r'base depth %0.1f $\pm$ %0.1f km'
                          % (base_depth, base_depth_err),
-                         xy=(0.01, 0.3), xytext=(0.01, 0.3))
+                         xy=(0.1, 0), xytext=(0.1, 0))
+            # plt.tight_layout()
             plt.savefig(plotfile, dpi=300, bbox_inches='tight')
+            plt.close()
 
     # create dataframe of results tables
     results = pd.DataFrame(centroid_depth_table, index=window_table,
@@ -1160,10 +1120,13 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start, Zt_end,
     results['base_depth_err_table'] = base_depth_err_table
     results['gradient_table'] = gradient_table
     results['heatflow_table'] = heatflow_table
-
+    
     # combine cell center file with results table
     result = pd.concat([gridcenters, results], axis=1).dropna()
     result['window'] = result.index
+    print(results)
+    print(gridcenters)
+    print(result)
     result.to_csv(resultdir + dsep + 'cpd_results_beta_%.0f' % Beta + '.csv',
                   header=['window', 'east', 'north', 'centroid_depth',
                           'cent_depth_err', 'cent_rsq', 'top_depth',
