@@ -183,18 +183,13 @@ def splitgrid_geosoft(working_dir, gridfilename, window_width, overlap_factor):
     fig, ax = plt.subplots(figsize=(10, 10))
     ax = plt.subplot(aspect='equal')
 
-    # mag_equalised = equalize_hist(mag)
-    mag_equalised = mag
-    ls = LightSource(azdeg=45, altdeg=45)
-    norm_eq = cm_utils.MidpointNormalize(vmin=np.percentile(mag_equalised, 5),
-                                         vmax=np.percentile(mag_equalised, 95),
+    norm_eq = cm_utils.MidpointNormalize(vmin=np.nanpercentile(mag, 5),
+                                         vmax=np.nanpercentile(mag, 95),
                                          midpoint=0)
 
-    cmap = sci_cm.vik
-    relief = ls.shade(mag, cmap=cmap, blend_mode='overlay',
-                      vert_exag=20, vmin=0, vmax=1)
+    cmap = sci_cm.roma
 
-    ax.imshow(relief, extent=(xmin, xmax, ymin, ymax), norm=norm_eq, alpha=0.8)
+    ax.imshow(mag, extent=(xmin, xmax, ymin, ymax), norm=norm_eq, alpha=0.8)
 
     plt.xlabel('Easting')
     plt.ylabel('Northing')
@@ -1120,13 +1115,11 @@ def calccpd_geosoft(working_dir, window_dir, Zo_start, Zo_end, Zt_start,
     results['base_depth_err_table'] = base_depth_err_table
     results['gradient_table'] = gradient_table
     results['heatflow_table'] = heatflow_table
-    
+
     # combine cell center file with results table
     result = pd.concat([gridcenters, results], axis=1).dropna()
     result['window'] = result.index
-    print(results)
-    print(gridcenters)
-    print(result)
+
     result.to_csv(resultdir + dsep + 'cpd_results_beta_%.0f' % Beta + '.csv',
                   header=['window', 'east', 'north', 'centroid_depth',
                           'cent_depth_err', 'cent_rsq', 'top_depth',
