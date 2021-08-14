@@ -183,16 +183,18 @@ def splitgrid_geosoft(working_dir, gridfilename, window_width, overlap_factor):
     fig, ax = plt.subplots(figsize=(10, 10))
     ax = plt.subplot(aspect='equal')
 
-    norm_eq = cm_utils.MidpointNormalize(vmin=np.nanpercentile(mag, 5),
-                                         vmax=np.nanpercentile(mag, 95),
-                                         midpoint=0)
+    norm = cm_utils.MidpointNormalize(vmin=np.nanpercentile(mag, 1),
+                                      vmax=np.nanpercentile(mag, 99),
+                                      midpoint=0)
 
-    cmap = sci_cm.roma
+    cmap = sci_cm.batlow
 
-    ax.imshow(mag, extent=(xmin, xmax, ymin, ymax), norm=norm_eq, alpha=0.8)
+    cbar = ax.imshow(mag, extent=(xmin, xmax, ymin, ymax), norm=norm, cmap=cmap,
+                     alpha=0.8)
 
-    plt.xlabel('Easting')
-    plt.ylabel('Northing')
+    ax.set_xlabel('Easting')
+    ax.set_ylabel('Northing')
+    plt.colorbar(cbar, ax=ax, label='nT')
 
     colors = np.random.rand(len(center))
     cmap = plt.cm.tab20
